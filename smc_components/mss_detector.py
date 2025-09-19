@@ -1,6 +1,6 @@
 """
-Market Structure Shift (MSS) Detection Engine
-Implements institutional-grade trend change identification with validation
+Market Structure Shift (MSS) Detection Engine - FIXED VERSION
+Implements institutional-grade trend change identification with improved sensitivity
 """
 
 from typing import List, Dict, Optional, Tuple
@@ -38,29 +38,22 @@ class MSSSignal:
 
 class MSSDetector:
     """
-    Advanced Market Structure Shift Detection Engine
+    Advanced Market Structure Shift Detection Engine - IMPROVED VERSION
     
-    Implements institutional-grade MSS detection with:
-    - Trend change identification  
-    - Multi-swing validation
-    - Retest analysis
-    - Volume and momentum confirmation
-    - Confluence tracking
+    Key improvements:
+    - Reduced swing length from 15 to 10
+    - Reduced minimum displacement from 25 to 15 pips
+    - Reduced validation swings from 3 to 2
+    - Better data requirements (40 bars instead of 75)
     """
     
     def __init__(self,
-                 swing_length: int = 15,
-                 min_displacement_pips: float = 25.0,
-                 trend_validation_swings: int = 3,
+                 swing_length: int = 10,  # Reduced from 15
+                 min_displacement_pips: float = 15.0,  # Reduced from 25.0
+                 trend_validation_swings: int = 2,  # Reduced from 3
                  retest_tolerance_pips: float = 10.0):
         """
-        Initialize MSS Detector
-        
-        Args:
-            swing_length: Length for swing point detection
-            min_displacement_pips: Minimum displacement for valid MSS
-            trend_validation_swings: Number of swings needed for trend validation
-            retest_tolerance_pips: Tolerance for retest validation
+        Initialize MSS Detector with improved parameters
         """
         self.swing_length = swing_length
         self.min_displacement_pips = min_displacement_pips
@@ -69,16 +62,9 @@ class MSSDetector:
         
     def detect_mss_signals(self, df: pd.DataFrame, symbol: str = "UNKNOWN") -> List[MSSSignal]:
         """
-        Detect Market Structure Shift signals
-        
-        Args:
-            df: OHLC DataFrame with columns ['Open', 'High', 'Low', 'Close', 'Volume']
-            symbol: Symbol name for pip calculation
-            
-        Returns:
-            List of detected MSS signals
+        Detect Market Structure Shift signals with improved logic
         """
-        if len(df) < self.swing_length * 5:
+        if len(df) < self.swing_length * 4:  # Reduced from swing_length * 5
             return []
         
         mss_signals = []
@@ -91,9 +77,9 @@ class MSSDetector:
         # Combine and sort swings
         all_swings = self._combine_swings(swing_highs, swing_lows)
         
-        # Analyze trend changes
+        # Analyze trend changes with reduced requirements
         for i in range(self.trend_validation_swings * 2, len(all_swings)):
-            mss_signal = self._analyze_structure_shift(
+            mss_signal = self._analyze_structure_shift_improved(
                 all_swings, i, df, pip_size
             )
             if mss_signal:
@@ -107,14 +93,15 @@ class MSSDetector:
         return mss_signals
     
     def _find_swing_highs(self, df: pd.DataFrame) -> List[Dict]:
-        """Find swing high points"""
+        """Find swing high points with improved sensitivity"""
         swing_highs = []
         
         for i in range(self.swing_length, len(df) - self.swing_length):
             window_data = df.iloc[i-self.swing_length:i+self.swing_length+1]
             current_high = df.iloc[i]['High']
             
-            if current_high == window_data['High'].max():
+            # More flexible swing detection
+            if current_high >= window_data['High'].quantile(0.85):  # Top 15% instead of max
                 swing_highs.append({
                     'timestamp': df.index[i],
                     'price': current_high,
@@ -125,14 +112,15 @@ class MSSDetector:
         return swing_highs
     
     def _find_swing_lows(self, df: pd.DataFrame) -> List[Dict]:
-        """Find swing low points"""
+        """Find swing low points with improved sensitivity"""
         swing_lows = []
         
         for i in range(self.swing_length, len(df) - self.swing_length):
             window_data = df.iloc[i-self.swing_length:i+self.swing_length+1]
             current_low = df.iloc[i]['Low']
             
-            if current_low == window_data['Low'].min():
+            # More flexible swing detection
+            if current_low <= window_data['Low'].quantile(0.15):  # Bottom 15% instead of min
                 swing_lows.append({
                     'timestamp': df.index[i],
                     'price': current_low,
@@ -148,67 +136,70 @@ class MSSDetector:
         all_swings.sort(key=lambda x: x['timestamp'])
         return all_swings
     
-    def _analyze_structure_shift(self, all_swings: List[Dict], index: int,
-                                df: pd.DataFrame, pip_size: float) -> Optional[MSSSignal]:
-        """Analyze potential market structure shift at given swing index"""
+    def _analyze_structure_shift_improved(self, all_swings: List[Dict], index: int,
+                                        df: pd.DataFrame, pip_size: float) -> Optional[MSSSignal]:
+        """Improved structure shift analysis with more flexible criteria"""
         
-        # Get recent swings for trend analysis
+        # Get recent swings for trend analysis (reduced lookback)
         recent_swings = all_swings[max(0, index - self.trend_validation_swings*2):index+1]
         
-        if len(recent_swings) < self.trend_validation_swings * 2:
+        if len(recent_swings) < self.trend_validation_swings:  # Reduced requirement
             return None
         
-        # Determine previous trend
-        prev_trend = self._determine_trend(recent_swings[:-1])
+        # Determine previous trend with more lenient criteria
+        prev_trend = self._determine_trend_improved(recent_swings[:-1])
         
         # Check if current swing creates a structure shift
         current_swing = all_swings[index]
         shift_detected = False
         mss_type = None
         break_level = None
+        future_extreme = None
         
-        if prev_trend == 'bearish' and current_swing['type'] == 'low':
-            # Potential bullish MSS - need to break previous lower high
+        if (prev_trend in ['bearish', 'ranging']) and current_swing['type'] == 'low':
+            # Potential bullish MSS - look for break above recent resistance
             prev_highs = [s for s in recent_swings if s['type'] == 'high']
             if prev_highs:
                 prev_highs.sort(key=lambda x: x['timestamp'])
                 potential_break_level = prev_highs[-1]['price']  # Most recent high
                 
-                # Check if price breaks above this level significantly
-                future_high = self._get_future_extreme(df, current_swing['index'], 'high', 10)
+                # Check if price breaks above this level
+                future_high = self._get_future_extreme(df, current_swing['index'], 'high', 15)  # Increased lookforward
                 if future_high and (future_high - potential_break_level) / pip_size >= self.min_displacement_pips:
                     shift_detected = True
                     mss_type = MSSType.BULLISH_MSS
                     break_level = potential_break_level
+                    future_extreme = future_high
         
-        elif prev_trend == 'bullish' and current_swing['type'] == 'high':
-            # Potential bearish MSS - need to break previous higher low
+        elif (prev_trend in ['bullish', 'ranging']) and current_swing['type'] == 'high':
+            # Potential bearish MSS - look for break below recent support
             prev_lows = [s for s in recent_swings if s['type'] == 'low']
             if prev_lows:
                 prev_lows.sort(key=lambda x: x['timestamp'])
                 potential_break_level = prev_lows[-1]['price']  # Most recent low
                 
-                # Check if price breaks below this level significantly
-                future_low = self._get_future_extreme(df, current_swing['index'], 'low', 10)
+                # Check if price breaks below this level
+                future_low = self._get_future_extreme(df, current_swing['index'], 'low', 15)  # Increased lookforward
                 if future_low and (potential_break_level - future_low) / pip_size >= self.min_displacement_pips:
                     shift_detected = True
                     mss_type = MSSType.BEARISH_MSS
                     break_level = potential_break_level
+                    future_extreme = future_low
         
         if not shift_detected:
             return None
         
         # Calculate displacement
         if mss_type == MSSType.BULLISH_MSS:
-            displacement = (future_high - break_level) / pip_size
+            displacement = (future_extreme - break_level) / pip_size
         else:
-            displacement = (break_level - future_low) / pip_size
+            displacement = (break_level - future_extreme) / pip_size
         
         # Determine new trend
         new_trend = 'bullish' if mss_type == MSSType.BULLISH_MSS else 'bearish'
         
-        # Classify strength
-        strength = self._classify_mss_strength(displacement, recent_swings)
+        # Classify strength with adjusted thresholds
+        strength = self._classify_mss_strength_improved(displacement, recent_swings)
         
         return MSSSignal(
             timestamp=current_swing['timestamp'],
@@ -221,35 +212,46 @@ class MSSDetector:
             confluence_factors=[]
         )
     
-    def _determine_trend(self, swings: List[Dict]) -> str:
-        """Determine trend from swing sequence"""
-        if len(swings) < 4:
+    def _determine_trend_improved(self, swings: List[Dict]) -> str:
+        """Improved trend determination with more flexible criteria"""
+        if len(swings) < 2:  # Reduced from 4
             return 'ranging'
         
         highs = [s for s in swings if s['type'] == 'high']
         lows = [s for s in swings if s['type'] == 'low']
         
-        if len(highs) < 2 or len(lows) < 2:
+        if len(highs) < 1 or len(lows) < 1:  # More lenient
             return 'ranging'
         
         # Sort by time
         highs.sort(key=lambda x: x['timestamp'])
         lows.sort(key=lambda x: x['timestamp'])
         
-        # Check for trend patterns
-        recent_highs = highs[-2:]
-        recent_lows = lows[-2:]
+        # Check for trend patterns with available data
+        higher_highs = None
+        higher_lows = None
         
-        higher_highs = recent_highs[1]['price'] > recent_highs[0]['price']
-        higher_lows = recent_lows[1]['price'] > recent_lows[0]['price']
+        if len(highs) >= 2:
+            recent_highs = highs[-2:]
+            higher_highs = recent_highs[1]['price'] > recent_highs[0]['price']
         
-        lower_highs = recent_highs[1]['price'] < recent_highs[0]['price']
-        lower_lows = recent_lows[1]['price'] < recent_lows[0]['price']
+        if len(lows) >= 2:
+            recent_lows = lows[-2:]
+            higher_lows = recent_lows[1]['price'] > recent_lows[0]['price']
         
+        # Determine trend with partial information
         if higher_highs and higher_lows:
             return 'bullish'
-        elif lower_highs and lower_lows:
+        elif higher_highs is False and higher_lows is False:
             return 'bearish'
+        elif higher_highs and higher_lows is None:
+            return 'bullish'  # Partial bullish signal
+        elif higher_highs is False and higher_lows is None:
+            return 'bearish'  # Partial bearish signal
+        elif higher_highs is None and higher_lows:
+            return 'bullish'  # Partial bullish signal
+        elif higher_highs is None and higher_lows is False:
+            return 'bearish'  # Partial bearish signal
         else:
             return 'ranging'
     
@@ -267,22 +269,22 @@ class MSSDetector:
         else:
             return future_data['Low'].min()
     
-    def _classify_mss_strength(self, displacement: float, recent_swings: List[Dict]) -> MSSStrength:
-        """Classify MSS strength based on displacement and swing quality"""
+    def _classify_mss_strength_improved(self, displacement: float, recent_swings: List[Dict]) -> MSSStrength:
+        """Improved MSS strength classification with adjusted thresholds"""
         
-        # Base classification on displacement
-        if displacement >= 50:
+        # Adjusted base classification on displacement
+        if displacement >= 35:  # Reduced from 50
             base_strength = MSSStrength.MAJOR
-        elif displacement >= 35:
+        elif displacement >= 20:  # Reduced from 35
             base_strength = MSSStrength.INTERMEDIATE
         else:
             base_strength = MSSStrength.MINOR
         
         # Adjust based on swing quality (more swings = stronger confirmation)
         swing_count = len(recent_swings)
-        if swing_count >= 8 and base_strength == MSSStrength.INTERMEDIATE:
+        if swing_count >= 6 and base_strength == MSSStrength.INTERMEDIATE:  # Reduced from 8
             return MSSStrength.MAJOR
-        elif swing_count >= 6 and base_strength == MSSStrength.MINOR:
+        elif swing_count >= 4 and base_strength == MSSStrength.MINOR:  # Reduced from 6
             return MSSStrength.INTERMEDIATE
         
         return base_strength
@@ -409,11 +411,11 @@ class MSSDetector:
         # Sort by timestamp
         sorted_signals = sorted(mss_signals, key=lambda x: x.timestamp, reverse=True)
         
-        # Filter for quality signals
+        # More lenient filtering for quality signals
         quality_signals = [
             signal for signal in sorted_signals
-            if (signal.strength in [MSSStrength.MAJOR, MSSStrength.INTERMEDIATE] and
-                signal.momentum_score >= 0.6)
+            if (signal.strength in [MSSStrength.MAJOR, MSSStrength.INTERMEDIATE, MSSStrength.MINOR] and
+                signal.momentum_score >= 0.4)  # Reduced from 0.6
         ]
         
         return quality_signals[:3]  # Return top 3 most recent quality signals
