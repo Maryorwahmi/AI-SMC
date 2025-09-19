@@ -1,6 +1,6 @@
 """
-Change of Character (CHoCH) Detection Engine
-Implements institutional-grade market structure break detection with confirmation
+Change of Character (CHoCH) Detection Engine - FIXED VERSION
+Implements institutional-grade market structure break detection with improved sensitivity
 """
 
 from typing import List, Dict, Optional, Tuple
@@ -44,29 +44,22 @@ class CHoCHSignal:
 
 class CHoCHDetector:
     """
-    Advanced Change of Character Detection Engine
+    Advanced Change of Character Detection Engine - IMPROVED VERSION
     
-    Implements institutional-grade CHoCH detection with:
-    - Market structure break identification
-    - Displacement validation
-    - Confirmation requirements
-    - Volume analysis
-    - Follow-through tracking
+    Key improvements:
+    - Reduced minimum displacement from 15 to 8 pips
+    - More flexible structure detection
+    - Better handling of ranging markets
+    - Improved swing point detection
     """
     
     def __init__(self,
-                 swing_length: int = 10,
-                 min_displacement_pips: float = 15.0,
-                 confirmation_bars: int = 3,
+                 swing_length: int = 7,  # Reduced from 10
+                 min_displacement_pips: float = 8.0,  # Reduced from 15.0
+                 confirmation_bars: int = 2,  # Reduced from 3
                  volume_threshold_multiplier: float = 1.2):
         """
-        Initialize CHoCH Detector
-        
-        Args:
-            swing_length: Length for swing point detection
-            min_displacement_pips: Minimum displacement for valid CHoCH
-            confirmation_bars: Bars needed for confirmation
-            volume_threshold_multiplier: Volume multiplier for confirmation
+        Initialize CHoCH Detector with improved parameters
         """
         self.swing_length = swing_length
         self.min_displacement_pips = min_displacement_pips
@@ -75,39 +68,31 @@ class CHoCHDetector:
         
     def detect_choch_signals(self, df: pd.DataFrame, symbol: str = "UNKNOWN") -> List[CHoCHSignal]:
         """
-        Detect Change of Character signals
-        
-        Args:
-            df: OHLC DataFrame with columns ['Open', 'High', 'Low', 'Close', 'Volume']
-            symbol: Symbol name for pip calculation
-            
-        Returns:
-            List of detected CHoCH signals
+        Detect Change of Character signals with improved logic
         """
-        if len(df) < self.swing_length * 3:
+        if len(df) < self.swing_length * 2:  # Reduced from swing_length * 3
             return []
         
         choch_signals = []
         pip_size = self._get_pip_size(symbol)
         
-        # Find swing points
+        # Find swing points with improved detection
         swing_highs = self._find_swing_highs(df)
         swing_lows = self._find_swing_lows(df)
         
-        # Analyze market structure
-        structure_history = self._analyze_market_structure(swing_highs, swing_lows, df)
+        # Analyze market structure with better logic
+        structure_history = self._analyze_market_structure_improved(swing_highs, swing_lows, df)
         
-        # Detect structure breaks
+        # Detect structure breaks with enhanced validation
         for i in range(len(structure_history) - 1):
             current_structure = structure_history[i]
             next_structure = structure_history[i + 1]
             
-            if current_structure['structure'] != next_structure['structure']:
-                choch_signal = self._validate_choch(
-                    current_structure, next_structure, df, pip_size
-                )
-                if choch_signal:
-                    choch_signals.append(choch_signal)
+            choch_signal = self._validate_choch_improved(
+                current_structure, next_structure, df, pip_size
+            )
+            if choch_signal:
+                choch_signals.append(choch_signal)
         
         # Post-process signals
         choch_signals = self._add_confirmations(choch_signals, df)
@@ -116,14 +101,15 @@ class CHoCHDetector:
         return choch_signals
     
     def _find_swing_highs(self, df: pd.DataFrame) -> List[Dict]:
-        """Find swing high points"""
+        """Find swing high points with improved sensitivity"""
         swing_highs = []
         
         for i in range(self.swing_length, len(df) - self.swing_length):
             window_data = df.iloc[i-self.swing_length:i+self.swing_length+1]
             current_high = df.iloc[i]['High']
             
-            if current_high == window_data['High'].max():
+            # More flexible swing detection
+            if current_high >= window_data['High'].quantile(0.9):  # Top 10% instead of max
                 swing_highs.append({
                     'timestamp': df.index[i],
                     'price': current_high,
@@ -133,14 +119,15 @@ class CHoCHDetector:
         return swing_highs
     
     def _find_swing_lows(self, df: pd.DataFrame) -> List[Dict]:
-        """Find swing low points"""
+        """Find swing low points with improved sensitivity"""
         swing_lows = []
         
         for i in range(self.swing_length, len(df) - self.swing_length):
             window_data = df.iloc[i-self.swing_length:i+self.swing_length+1]
             current_low = df.iloc[i]['Low']
             
-            if current_low == window_data['Low'].min():
+            # More flexible swing detection
+            if current_low <= window_data['Low'].quantile(0.1):  # Bottom 10% instead of min
                 swing_lows.append({
                     'timestamp': df.index[i],
                     'price': current_low,
@@ -149,12 +136,12 @@ class CHoCHDetector:
         
         return swing_lows
     
-    def _analyze_market_structure(self, swing_highs: List[Dict], 
-                                 swing_lows: List[Dict], df: pd.DataFrame) -> List[Dict]:
-        """Analyze market structure evolution"""
+    def _analyze_market_structure_improved(self, swing_highs: List[Dict], 
+                                         swing_lows: List[Dict], df: pd.DataFrame) -> List[Dict]:
+        """Improved market structure analysis"""
         structure_history = []
         
-        if len(swing_highs) < 2 or len(swing_lows) < 2:
+        if len(swing_highs) < 1 or len(swing_lows) < 1:  # Reduced requirements
             return structure_history
         
         # Combine and sort swing points by time
@@ -168,10 +155,10 @@ class CHoCHDetector:
         
         all_swings.sort(key=lambda x: x['timestamp'])
         
-        # Analyze structure at each swing point
-        for i in range(4, len(all_swings)):  # Need at least 4 swings for structure
-            recent_swings = all_swings[i-4:i+1]
-            structure = self._determine_structure(recent_swings)
+        # Analyze structure at each swing point with reduced requirements
+        for i in range(2, len(all_swings)):  # Reduced from 4
+            recent_swings = all_swings[max(0, i-3):i+1]  # Look at last 4 swings
+            structure = self._determine_structure_improved(recent_swings)
             
             structure_history.append({
                 'timestamp': all_swings[i]['timestamp'],
@@ -182,66 +169,73 @@ class CHoCHDetector:
         
         return structure_history
     
-    def _determine_structure(self, swings: List[Dict]) -> MarketStructure:
-        """Determine market structure from swing points"""
+    def _determine_structure_improved(self, swings: List[Dict]) -> MarketStructure:
+        """Improved structure determination with better logic"""
         highs = [s for s in swings if s['type'] == 'high']
         lows = [s for s in swings if s['type'] == 'low']
         
-        if len(highs) < 2 or len(lows) < 2:
+        if len(highs) < 1 or len(lows) < 1:  # Reduced requirements
             return MarketStructure.RANGING
         
         # Sort by time
         highs.sort(key=lambda x: x['timestamp'])
         lows.sort(key=lambda x: x['timestamp'])
         
-        # Check for higher highs and higher lows (bullish structure)
-        recent_highs = highs[-2:]
-        recent_lows = lows[-2:]
+        # More flexible structure analysis
+        if len(highs) >= 2:
+            recent_highs = highs[-2:]
+            higher_highs = recent_highs[1]['price'] > recent_highs[0]['price']
+        else:
+            higher_highs = None
+            
+        if len(lows) >= 2:
+            recent_lows = lows[-2:]
+            higher_lows = recent_lows[1]['price'] > recent_lows[0]['price']
+        else:
+            higher_lows = None
         
-        higher_highs = recent_highs[1]['price'] > recent_highs[0]['price']
-        higher_lows = recent_lows[1]['price'] > recent_lows[0]['price']
-        
-        lower_highs = recent_highs[1]['price'] < recent_highs[0]['price']
-        lower_lows = recent_lows[1]['price'] < recent_lows[0]['price']
-        
+        # Determine structure with partial information
         if higher_highs and higher_lows:
             return MarketStructure.BULLISH
-        elif lower_highs and lower_lows:
+        elif higher_highs is False and higher_lows is False:
             return MarketStructure.BEARISH
+        elif higher_highs and higher_lows is None:
+            return MarketStructure.BULLISH  # Partial bullish signal
+        elif higher_highs is False and higher_lows is None:
+            return MarketStructure.BEARISH  # Partial bearish signal
         else:
             return MarketStructure.RANGING
     
-    def _validate_choch(self, current_structure: Dict, next_structure: Dict,
-                       df: pd.DataFrame, pip_size: float) -> Optional[CHoCHSignal]:
-        """Validate potential CHoCH signal"""
+    def _validate_choch_improved(self, current_structure: Dict, next_structure: Dict,
+                               df: pd.DataFrame, pip_size: float) -> Optional[CHoCHSignal]:
+        """Improved CHoCH validation with more flexible criteria"""
         
         prev_struct = current_structure['structure']
         new_struct = next_structure['structure']
         
-        # Only interested in clear structure changes
-        if prev_struct == MarketStructure.RANGING or new_struct == MarketStructure.RANGING:
-            return None
+        # Accept transitions from/to ranging markets
+        choch_type = None
         
-        # Determine CHoCH type
-        if prev_struct == MarketStructure.BEARISH and new_struct == MarketStructure.BULLISH:
+        if ((prev_struct == MarketStructure.BEARISH and new_struct == MarketStructure.BULLISH) or
+            (prev_struct == MarketStructure.RANGING and new_struct == MarketStructure.BULLISH) or
+            (prev_struct == MarketStructure.BEARISH and new_struct == MarketStructure.RANGING)):
             choch_type = CHoCHType.BULLISH_CHOCH
-        elif prev_struct == MarketStructure.BULLISH and new_struct == MarketStructure.BEARISH:
+        elif ((prev_struct == MarketStructure.BULLISH and new_struct == MarketStructure.BEARISH) or
+              (prev_struct == MarketStructure.RANGING and new_struct == MarketStructure.BEARISH) or
+              (prev_struct == MarketStructure.BULLISH and new_struct == MarketStructure.RANGING)):
             choch_type = CHoCHType.BEARISH_CHOCH
-        else:
+        
+        if choch_type is None:
             return None
         
-        # Find the break level (significant swing point that was broken)
-        break_level = self._find_break_level(current_structure, next_structure, choch_type)
+        # Find break level with improved logic
+        break_level = self._find_break_level_improved(current_structure, next_structure, choch_type)
         if break_level is None:
             return None
         
-        # Calculate displacement
+        # Calculate displacement with reduced requirements
         break_timestamp = next_structure['timestamp']
-        break_index = None
-        for i, timestamp in enumerate(df.index):
-            if timestamp == break_timestamp:
-                break_index = i
-                break
+        break_index = self._get_timestamp_index(df, break_timestamp)
         
         if break_index is None:
             return None
@@ -250,6 +244,7 @@ class CHoCHDetector:
             df, break_index, break_level, choch_type, pip_size
         )
         
+        # More lenient displacement requirement
         if displacement < self.min_displacement_pips:
             return None
         
@@ -267,20 +262,20 @@ class CHoCHDetector:
             confluence_factors=[]
         )
     
-    def _find_break_level(self, current_structure: Dict, next_structure: Dict,
-                         choch_type: CHoCHType) -> Optional[float]:
-        """Find the level that was broken to create CHoCH"""
+    def _find_break_level_improved(self, current_structure: Dict, next_structure: Dict,
+                                 choch_type: CHoCHType) -> Optional[float]:
+        """Improved break level detection"""
         
         current_swings = current_structure['recent_swings']
         
         if choch_type == CHoCHType.BULLISH_CHOCH:
-            # Find the most recent significant high that needs to be broken
+            # Find any recent high that could be broken
             highs = [s for s in current_swings if s['type'] == 'high']
             if highs:
                 highs.sort(key=lambda x: x['timestamp'])
                 return highs[-1]['price']  # Most recent high
         else:
-            # Find the most recent significant low that needs to be broken
+            # Find any recent low that could be broken
             lows = [s for s in current_swings if s['type'] == 'low']
             if lows:
                 lows.sort(key=lambda x: x['timestamp'])
@@ -294,7 +289,7 @@ class CHoCHDetector:
         """Calculate displacement after structure break"""
         
         # Look at displacement in the next few bars
-        end_index = min(break_index + 5, len(df))
+        end_index = min(break_index + 8, len(df))  # Increased lookforward
         future_data = df.iloc[break_index:end_index]
         
         if choch_type == CHoCHType.BULLISH_CHOCH:
@@ -307,24 +302,27 @@ class CHoCHDetector:
         return max(0, displacement)
     
     def _classify_choch_strength(self, displacement: float) -> CHoCHStrength:
-        """Classify CHoCH strength based on displacement"""
-        if displacement >= 30:
+        """Classify CHoCH strength with adjusted thresholds"""
+        if displacement >= 20:  # Reduced from 30
             return CHoCHStrength.STRONG
-        elif displacement >= 20:
+        elif displacement >= 12:  # Reduced from 20
             return CHoCHStrength.MODERATE
         else:
             return CHoCHStrength.WEAK
+    
+    def _get_timestamp_index(self, df: pd.DataFrame, timestamp: datetime) -> Optional[int]:
+        """Get index for timestamp in DataFrame"""
+        for i, ts in enumerate(df.index):
+            if ts == timestamp:
+                return i
+        return None
     
     def _add_confirmations(self, choch_signals: List[CHoCHSignal],
                           df: pd.DataFrame) -> List[CHoCHSignal]:
         """Add confirmation analysis to CHoCH signals"""
         
         for signal in choch_signals:
-            signal_index = None
-            for i, timestamp in enumerate(df.index):
-                if timestamp == signal.timestamp:
-                    signal_index = i
-                    break
+            signal_index = self._get_timestamp_index(df, signal.timestamp)
             
             if signal_index is None:
                 continue
@@ -338,12 +336,12 @@ class CHoCHDetector:
             if signal.type == CHoCHType.BULLISH_CHOCH:
                 # Count bullish confirmation bars
                 for _, candle in confirmation_data.iterrows():
-                    if candle['Close'] > candle['Open'] and candle['Close'] > signal.break_level:
+                    if candle['Close'] > candle['Open']:  # Removed break level requirement
                         confirmation_count += 1
             else:
                 # Count bearish confirmation bars
                 for _, candle in confirmation_data.iterrows():
-                    if candle['Close'] < candle['Open'] and candle['Close'] < signal.break_level:
+                    if candle['Close'] < candle['Open']:  # Removed break level requirement
                         confirmation_count += 1
             
             signal.confirmation_count = confirmation_count
@@ -377,11 +375,7 @@ class CHoCHDetector:
         """Analyze follow-through after CHoCH signals"""
         
         for signal in choch_signals:
-            signal_index = None
-            for i, timestamp in enumerate(df.index):
-                if timestamp == signal.timestamp:
-                    signal_index = i
-                    break
+            signal_index = self._get_timestamp_index(df, signal.timestamp)
             
             if signal_index is None:
                 continue
@@ -397,12 +391,12 @@ class CHoCHDetector:
                 # Check if price continues higher
                 max_follow = follow_data['High'].max()
                 follow_displacement = (max_follow - signal.break_level) / pip_size
-                signal.follow_through = follow_displacement > signal.displacement_pips * 0.5
+                signal.follow_through = follow_displacement > signal.displacement_pips * 0.3  # Reduced from 0.5
             else:
                 # Check if price continues lower
                 min_follow = follow_data['Low'].min()
                 follow_displacement = (signal.break_level - min_follow) / pip_size
-                signal.follow_through = follow_displacement > signal.displacement_pips * 0.5
+                signal.follow_through = follow_displacement > signal.displacement_pips * 0.3  # Reduced from 0.5
         
         return choch_signals
     
@@ -423,11 +417,11 @@ class CHoCHDetector:
         # Sort by timestamp
         sorted_signals = sorted(choch_signals, key=lambda x: x.timestamp, reverse=True)
         
-        # Filter for strong and moderate signals with good confirmation
+        # More lenient filtering for quality signals
         quality_signals = [
             signal for signal in sorted_signals
-            if (signal.strength in [CHoCHStrength.STRONG, CHoCHStrength.MODERATE] and
-                signal.confirmation_count >= 2)
+            if (signal.strength in [CHoCHStrength.STRONG, CHoCHStrength.MODERATE, CHoCHStrength.WEAK] and
+                signal.confirmation_count >= 1)  # Reduced from 2
         ]
         
         return quality_signals[:5]  # Return top 5 most recent quality signals
